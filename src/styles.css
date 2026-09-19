@@ -1,0 +1,154 @@
+:root {
+  font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+  background: #f4f5f7;
+  color: #1c1c1e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+h1 {
+  margin-bottom: 0;
+}
+
+.subtitle {
+  color: #666;
+  margin-top: 4px;
+  margin-bottom: 24px;
+}
+
+section {
+  background: #fff;
+  border: 1px solid #e2e2e2;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+h2 {
+  font-size: 15px;
+  margin-top: 0;
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+
+.hint {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: #888;
+  margin-top: 2px;
+}
+
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.gemini-key-row {
+  margin-bottom: 8px;
+}
+
+.key-input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.key-input-group input {
+  flex: 1;
+}
+
+.btn-remove {
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  color: #b91c1c;
+  border-radius: 6px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.btn-add {
+  margin-top: 8px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #3730a3;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.toggle-row input {
+  width: 18px;
+  height: 18px;
+}
+
+.folder-picker-row {
+  display: flex;
+  gap: 8px;
+}
+
+.folder-picker-row input {
+  flex: 1;
+  background: #f9f9f9;
+}
+
+.folder-picker-row button {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fafafa;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-save {
+  width: 100%;
+  padding: 12px;
+  background: #111827;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.status {
+  text-align: center;
+  color: #555;
+  font-size: 13px;
+  margin-top: 10px;
+}
