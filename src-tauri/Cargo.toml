@@ -1,6 +1,6 @@
 [package]
 name = "threads-automator"
-version = "0.1.0"
+version = "0.1.2"
 description = "Panel pengaturan untuk sistem auto-post Threads"
 edition = "2021"
 
