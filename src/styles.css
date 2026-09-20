@@ -152,3 +152,31 @@ input[type="password"] {
   font-size: 13px;
   margin-top: 10px;
 }
+
+.log-box {
+  margin-top: 12px;
+  background: #0b1021;
+  border-radius: 8px;
+  padding: 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-family: "Consolas", monospace;
+  font-size: 11px;
+}
+
+.log-ok {
+  color: #86efac;
+  margin-bottom: 4px;
+}
+
+.log-fail {
+  color: #fca5a5;
+  margin-bottom: 4px;
+}
+
+select {
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 13px;
+}
