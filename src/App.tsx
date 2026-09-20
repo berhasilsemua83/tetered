@@ -2,8 +2,14 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
-// Struktur ini HARUS sama persis dengan struct AppConfig di main.rs (Rust),
-// supaya data yang disimpan/dibaca tidak salah bentuk.
+interface ScheduleConfig {
+  thread_poster_times: string[];
+  reply_checker_interval_minutes: number;
+  comment_responder_interval_minutes: number;
+  refresh_token_day: string;
+  refresh_token_time: string;
+}
+
 interface AppConfig {
   threads_user_id: string;
   threads_access_token: string;
@@ -16,6 +22,9 @@ interface AppConfig {
   ai_reply_enabled: boolean;
   queue_folder: string;
   posted_folder: string;
+  node_exe_path: string;
+  project_folder: string;
+  schedule: ScheduleConfig;
 }
 
 const EMPTY_CONFIG: AppConfig = {
@@ -26,20 +35,45 @@ const EMPTY_CONFIG: AppConfig = {
   ai_reply_enabled: false,
   queue_folder: "",
   posted_folder: "",
+  node_exe_path: "",
+  project_folder: "",
+  schedule: {
+    thread_poster_times: ["07:00"],
+    reply_checker_interval_minutes: 5,
+    comment_responder_interval_minutes: 15,
+    refresh_token_day: "MON",
+    refresh_token_time: "03:00",
+  },
 };
+
+const HARI_OPTIONS = [
+  { value: "MON", label: "Senin" },
+  { value: "TUE", label: "Selasa" },
+  { value: "WED", label: "Rabu" },
+  { value: "THU", label: "Kamis" },
+  { value: "FRI", label: "Jumat" },
+  { value: "SAT", label: "Sabtu" },
+  { value: "SUN", label: "Minggu" },
+];
 
 export default function App() {
   const [config, setConfig] = useState<AppConfig>(EMPTY_CONFIG);
   const [status, setStatus] = useState<string>("");
+  const [scheduleLog, setScheduleLog] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [applying, setApplying] = useState(false);
 
-  // Muat config yang sudah tersimpan sebelumnya (kalau ada) saat app dibuka
   useEffect(() => {
     invoke<AppConfig>("load_config")
       .then((loaded) => {
-        // Jaga-jaga kalau gemini_api_keys kosong, selalu ada minimal 1 kotak input
         if (!loaded.gemini_api_keys || loaded.gemini_api_keys.length === 0) {
           loaded.gemini_api_keys = [""];
+        }
+        if (!loaded.schedule) {
+          loaded.schedule = EMPTY_CONFIG.schedule;
+        }
+        if (!loaded.schedule.thread_poster_times || loaded.schedule.thread_poster_times.length === 0) {
+          loaded.schedule.thread_poster_times = ["07:00"];
         }
         setConfig(loaded);
       })
@@ -47,22 +81,53 @@ export default function App() {
       .finally(() => setLoading(false));
   }, []);
 
+  function cleanedConfig(): AppConfig {
+    return {
+      ...config,
+      gemini_api_keys: config.gemini_api_keys.filter((k) => k.trim() !== ""),
+      schedule: {
+        ...config.schedule,
+        thread_poster_times: config.schedule.thread_poster_times.filter((t) => t.trim() !== ""),
+      },
+    };
+  }
+
   async function handleSave() {
     setStatus("Menyimpan...");
     try {
-      // Buang baris Gemini key yang kosong sebelum disimpan
-      const cleaned = {
-        ...config,
-        gemini_api_keys: config.gemini_api_keys.filter((k) => k.trim() !== ""),
-      };
-      await invoke("save_config", { config: cleaned });
-      setStatus("Tersimpan.");
+      await invoke("save_config", { config: cleanedConfig() });
+      setStatus("Pengaturan tersimpan.");
     } catch (err) {
       setStatus(`Gagal menyimpan: ${err}`);
     }
   }
 
-  async function pickFolder(target: "queue_folder" | "posted_folder") {
+  async function handleApplySchedule() {
+    setApplying(true);
+    setScheduleLog([]);
+    setStatus("Menerapkan jadwal ke Windows Task Scheduler...");
+    try {
+      const log = await invoke<string[]>("apply_schedule", { config: cleanedConfig() });
+      setScheduleLog(log);
+      setStatus("Jadwal berhasil diterapkan. Cek detail di bawah.");
+    } catch (err) {
+      setStatus(`Gagal menerapkan jadwal: ${err}`);
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  async function handleDetectNode() {
+    try {
+      const path = await invoke<string>("detect_node_path");
+      setConfig((prev) => ({ ...prev, node_exe_path: path }));
+      setStatus(`node.exe ditemukan: ${path}`);
+    } catch (err) {
+      setStatus(`${err}`);
+    }
+  }
+
+  async function pickFolder(target: "queue_folder" | "posted_folder" | "project_folder") {
     const selected = await open({ directory: true, multiple: false });
     if (typeof selected === "string") {
       setConfig((prev) => ({ ...prev, [target]: selected }));
@@ -78,10 +143,7 @@ export default function App() {
   }
 
   function addGeminiKeyField() {
-    setConfig((prev) => ({
-      ...prev,
-      gemini_api_keys: [...prev.gemini_api_keys, ""],
-    }));
+    setConfig((prev) => ({ ...prev, gemini_api_keys: [...prev.gemini_api_keys, ""] }));
   }
 
   function removeGeminiKeyField(index: number) {
@@ -91,17 +153,47 @@ export default function App() {
     });
   }
 
+  function updateThreadPosterTime(index: number, value: string) {
+    setConfig((prev) => {
+      const updated = [...prev.schedule.thread_poster_times];
+      updated[index] = value;
+      return { ...prev, schedule: { ...prev.schedule, thread_poster_times: updated } };
+    });
+  }
+
+  function addThreadPosterTime() {
+    setConfig((prev) => ({
+      ...prev,
+      schedule: {
+        ...prev.schedule,
+        thread_poster_times: [...prev.schedule.thread_poster_times, "12:00"],
+      },
+    }));
+  }
+
+  function removeThreadPosterTime(index: number) {
+    setConfig((prev) => {
+      const updated = prev.schedule.thread_poster_times.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        schedule: {
+          ...prev.schedule,
+          thread_poster_times: updated.length > 0 ? updated : ["07:00"],
+        },
+      };
+    });
+  }
+
   if (loading) return <div className="container">Memuat pengaturan...</div>;
 
   return (
     <div className="container">
       <h1>Threads Automator</h1>
-      <p className="subtitle">Pengaturan kredensial &amp; perilaku sistem</p>
+      <p className="subtitle">Pengaturan kredensial, perilaku sistem &amp; jadwal</p>
 
-      {/* ===== BAGIAN THREADS ===== */}
+      {/* ===== THREADS ===== */}
       <section>
         <h2>Threads API</h2>
-
         <label className="field-label">
           Threads User ID
           <span className="hint">ID akun Threads kamu (dari endpoint /me)</span>
@@ -125,10 +217,9 @@ export default function App() {
         />
       </section>
 
-      {/* ===== BAGIAN CLOUDINARY ===== */}
+      {/* ===== CLOUDINARY ===== */}
       <section>
         <h2>Cloudinary (hosting video/gambar)</h2>
-
         <label className="field-label">
           Cloudinary Cloud Name
           <span className="hint">Dari dashboard cloudinary.com</span>
@@ -169,7 +260,7 @@ export default function App() {
         />
       </section>
 
-      {/* ===== BAGIAN GEMINI (MULTI KEY) ===== */}
+      {/* ===== GEMINI (MULTI KEY) ===== */}
       <section>
         <h2>Gemini API Key (untuk balasan AI)</h2>
         <p className="hint">
@@ -193,19 +284,13 @@ export default function App() {
                 onChange={(e) => updateGeminiKey(index, e.target.value)}
               />
               {config.gemini_api_keys.length > 1 && (
-                <button
-                  type="button"
-                  className="btn-remove"
-                  onClick={() => removeGeminiKeyField(index)}
-                  title="Hapus key ini"
-                >
+                <button type="button" className="btn-remove" onClick={() => removeGeminiKeyField(index)}>
                   ✕
                 </button>
               )}
             </div>
           </div>
         ))}
-
         <button type="button" className="btn-add" onClick={addGeminiKeyField}>
           + Tambah Gemini API Key
         </button>
@@ -228,29 +313,152 @@ export default function App() {
         </label>
       </section>
 
-      {/* ===== FOLDER ===== */}
+      {/* ===== FOLDER KONTEN ===== */}
       <section>
         <h2>Folder Konten</h2>
-
         <label className="field-label">Folder Queue (stok konten baru)</label>
         <div className="folder-picker-row">
           <input type="text" readOnly value={config.queue_folder} placeholder="Belum dipilih" />
-          <button type="button" onClick={() => pickFolder("queue_folder")}>
-            Pilih Folder
-          </button>
+          <button type="button" onClick={() => pickFolder("queue_folder")}>Pilih Folder</button>
         </div>
 
         <label className="field-label">Folder Posted (arsip yang sudah tayang)</label>
         <div className="folder-picker-row">
           <input type="text" readOnly value={config.posted_folder} placeholder="Belum dipilih" />
-          <button type="button" onClick={() => pickFolder("posted_folder")}>
-            Pilih Folder
-          </button>
+          <button type="button" onClick={() => pickFolder("posted_folder")}>Pilih Folder</button>
         </div>
       </section>
 
+      {/* ===== LOKASI PROGRAM ===== */}
+      <section>
+        <h2>Lokasi Program</h2>
+
+        <label className="field-label">
+          Path node.exe
+          <span className="hint">Biasanya: C:\Program Files\nodejs\node.exe</span>
+        </label>
+        <div className="folder-picker-row">
+          <input
+            type="text"
+            value={config.node_exe_path}
+            placeholder="C:\Program Files\nodejs\node.exe"
+            onChange={(e) => setConfig({ ...config, node_exe_path: e.target.value })}
+          />
+          <button type="button" onClick={handleDetectNode}>Deteksi Otomatis</button>
+        </div>
+
+        <label className="field-label">
+          Folder Proyek
+          <span className="hint">Folder tempat thread-poster.js dkk berada, contoh: C:\autopost-threads</span>
+        </label>
+        <div className="folder-picker-row">
+          <input type="text" readOnly value={config.project_folder} placeholder="Belum dipilih" />
+          <button type="button" onClick={() => pickFolder("project_folder")}>Pilih Folder</button>
+        </div>
+      </section>
+
+      {/* ===== JADWAL ===== */}
+      <section>
+        <h2>Jadwal (Windows Task Scheduler)</h2>
+
+        <label className="field-label">
+          Jam Posting Utama (thread-poster.js)
+          <span className="hint">Bebas tambah/hapus jam sesuai kebutuhan</span>
+        </label>
+        {config.schedule.thread_poster_times.map((time, index) => (
+          <div className="key-input-group" key={index} style={{ marginBottom: 6 }}>
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => updateThreadPosterTime(index, e.target.value)}
+            />
+            {config.schedule.thread_poster_times.length > 1 && (
+              <button type="button" className="btn-remove" onClick={() => removeThreadPosterTime(index)}>
+                ✕
+              </button>
+            )}
+          </div>
+        ))}
+        <button type="button" className="btn-add" onClick={addThreadPosterTime}>
+          + Tambah Jam Posting
+        </button>
+
+        <label className="field-label" style={{ marginTop: 16 }}>
+          Interval Reply Checker (menit)
+          <span className="hint">Cek &amp; kirim reply link affiliate yang terjadwal</span>
+        </label>
+        <input
+          type="number"
+          min={1}
+          value={config.schedule.reply_checker_interval_minutes}
+          onChange={(e) =>
+            setConfig({
+              ...config,
+              schedule: { ...config.schedule, reply_checker_interval_minutes: Number(e.target.value) },
+            })
+          }
+        />
+
+        <label className="field-label">
+          Interval Comment Responder (menit)
+          <span className="hint">
+            Hanya berjalan kalau toggle "Balasan Komentar Otomatis (AI)" di atas AKTIF
+          </span>
+        </label>
+        <input
+          type="number"
+          min={1}
+          disabled={!config.ai_reply_enabled}
+          value={config.schedule.comment_responder_interval_minutes}
+          onChange={(e) =>
+            setConfig({
+              ...config,
+              schedule: { ...config.schedule, comment_responder_interval_minutes: Number(e.target.value) },
+            })
+          }
+        />
+
+        <label className="field-label">
+          Refresh Token — Hari &amp; Jam
+          <span className="hint">Cukup 1x seminggu</span>
+        </label>
+        <div className="key-input-group">
+          <select
+            value={config.schedule.refresh_token_day}
+            onChange={(e) =>
+              setConfig({ ...config, schedule: { ...config.schedule, refresh_token_day: e.target.value } })
+            }
+          >
+            {HARI_OPTIONS.map((h) => (
+              <option key={h.value} value={h.value}>{h.label}</option>
+            ))}
+          </select>
+          <input
+            type="time"
+            value={config.schedule.refresh_token_time}
+            onChange={(e) =>
+              setConfig({ ...config, schedule: { ...config.schedule, refresh_token_time: e.target.value } })
+            }
+          />
+        </div>
+
+        <button type="button" className="btn-save" style={{ marginTop: 16 }} onClick={handleApplySchedule} disabled={applying}>
+          {applying ? "Menerapkan..." : "Simpan & Terapkan Jadwal ke Task Scheduler"}
+        </button>
+
+        {scheduleLog.length > 0 && (
+          <div className="log-box">
+            {scheduleLog.map((line, i) => (
+              <div key={i} className={line.startsWith("[") && line.includes("GAGAL") ? "log-fail" : "log-ok"}>
+                {line}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       <button type="button" className="btn-save" onClick={handleSave}>
-        Simpan Pengaturan
+        Simpan Pengaturan Saja (tanpa mengubah jadwal)
       </button>
 
       {status && <p className="status">{status}</p>}
